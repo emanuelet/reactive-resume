@@ -136,22 +136,74 @@ it("reuses rendered image after card hide and remount", async () => {
 			<ResumeThumbnail resume={resume} isLocked={false} />
 		</QueryClientProvider>,
 	);
-	await waitFor(() => expect(remounted.container.querySelector<HTMLElement>("[style*='background-image']")?.style.backgroundImage).toContain("blob:576x768"));
+	await waitFor(() =>
+		expect(
+			remounted.container.querySelector<HTMLElement>("[style*='background-image']")?.style.backgroundImage,
+		).toContain("blob:576x768"),
+	);
 	expect(mocks.toPdf).toHaveBeenCalledTimes(1);
 	expect(mocks.toImage).toHaveBeenCalledTimes(1);
 	remounted.unmount();
 });
 
 it("revokes rendered images when query is evicted or replaced", async () => {
+	mocks.toImage.mockResolvedValueOnce("blob:original").mockResolvedValueOnce("blob:updated");
 	const view = setup();
-	await waitFor(() => expect(view.image()).toContain("blob:576x768"));
+	await waitFor(() => expect(view.image()).toContain("blob:original"));
 	currentResume = { ...resume, updatedAt: new Date(1000) };
 	view.refresh();
-	await waitFor(() => expect(view.image()).toContain("blob:576x768"));
-	expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:576x768");
+	await waitFor(() => expect(view.image()).toContain("blob:updated"));
+	expect(URL.revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:original");
 
 	view.client.removeQueries({ queryKey: ["resume-thumbnail"] });
-	expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:576x768");
+	expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+	expect(URL.revokeObjectURL).toHaveBeenLastCalledWith("blob:updated");
+	view.unmount();
+});
+
+it.each([true, false])("revokes same-query replacements after invalidation (mounted: %s)", async (mounted) => {
+	mocks.toImage.mockResolvedValueOnce("blob:original");
+	const view = setup();
+	await waitFor(() => expect(view.image()).toContain("blob:original"));
+	const query = view.client.getQueryCache().find({ queryKey: ["resume-thumbnail"], exact: false, type: "active" });
+	expect(query?.state.data).toBe("blob:original");
+	let finish!: (url: string) => void;
+	mocks.toImage.mockImplementationOnce(
+		() =>
+			new Promise<string>((resolve) => {
+				finish = resolve;
+			}),
+	);
+	if (!mounted) view.unmount();
+	let invalidation!: Promise<void>;
+	act(() => {
+		invalidation = view.client.invalidateQueries({ refetchType: mounted ? "active" : "all" });
+	});
+	await waitFor(() => expect(mocks.toImage).toHaveBeenCalledTimes(2));
+	expect(query?.state.data).toBe("blob:original");
+	if (mounted) expect(view.image()).toContain("blob:original");
+	expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+	await act(async () => {
+		finish("blob:replacement");
+		await invalidation;
+	});
+	await waitFor(() => expect(query?.state.data).toBe("blob:replacement"));
+	if (mounted) await waitFor(() => expect(view.image()).toContain("blob:replacement"));
+	expect(URL.revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:original");
+	view.unmount();
+	expect(URL.revokeObjectURL).not.toHaveBeenCalledWith("blob:replacement");
+	view.client.removeQueries({ queryKey: ["resume-thumbnail"] });
+	expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+	expect(URL.revokeObjectURL).toHaveBeenLastCalledWith("blob:replacement");
+});
+
+it("does not revoke URLs owned by unrelated queries", async () => {
+	const view = setup();
+	await waitFor(() => expect(view.image()).toContain("blob:576x768"));
+	view.client.setQueryData(["other-image"], "blob:other-original");
+	view.client.setQueryData(["other-image"], "blob:other-replacement");
+	view.client.removeQueries({ queryKey: ["other-image"] });
+	expect(URL.revokeObjectURL).not.toHaveBeenCalled();
 	view.unmount();
 });
 

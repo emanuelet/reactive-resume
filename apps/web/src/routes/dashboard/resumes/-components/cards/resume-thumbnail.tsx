@@ -34,10 +34,18 @@ function ensureThumbnailCacheLifecycle(queryClient: ReturnType<typeof useQueryCl
 	if (thumbnailQueryCaches.has(queryCache)) return;
 
 	thumbnailQueryCaches.add(queryCache);
+	// Cache updates have already replaced state.data, so retain each query's previous URL.
+	const urls = new WeakMap<object, unknown>(
+		queryCache.findAll({ queryKey: ["resume-thumbnail"] }).map((query) => [query, query.state.data]),
+	);
 	queryCache.subscribe((event) => {
-		if (event.type !== "removed") return;
-		const url = event.query.state.data;
-		if (typeof url === "string") URL.revokeObjectURL(url);
+		if (event.query.queryKey[0] !== "resume-thumbnail") return;
+		if (event.type !== "updated" && event.type !== "removed") return;
+		const previousUrl = urls.get(event.query);
+		const url = event.type === "removed" ? undefined : event.query.state.data;
+		if (typeof previousUrl === "string" && previousUrl !== url) URL.revokeObjectURL(previousUrl);
+		if (typeof url === "string") urls.set(event.query, url);
+		else urls.delete(event.query);
 	});
 }
 
