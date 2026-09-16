@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import z from "zod";
 import { defaultResumeData } from "@reactive-resume/schema/resume/default";
@@ -102,6 +103,24 @@ describe("generateOpenApiSpec", () => {
 				responses: { [successStatus]: { description: expect.any(String) } },
 			});
 		}
+	});
+
+	it("keeps published cover-letter operations in sync with the runtime spec", async () => {
+		const published = JSON.parse(
+			await readFile(new URL("../../../../docs/spec.json", import.meta.url), "utf8"),
+		) as GeneratedSpecView;
+		const runtime = await generateSpec();
+		const coverLetterPaths = (spec: GeneratedSpecView) =>
+			Object.fromEntries(
+				Object.entries(spec.paths ?? {}).filter(
+					([path]) => path.startsWith("/cover-letters") || path.startsWith("/coverLetters/"),
+				),
+			);
+
+		const publishedPaths = coverLetterPaths(published);
+		const runtimePaths = coverLetterPaths(runtime as GeneratedSpecView);
+		expect(Object.keys(publishedPaths).sort()).toEqual(Object.keys(runtimePaths).sort());
+		expect(publishedPaths).toEqual(runtimePaths);
 	});
 
 	it("uses caller-provided application URL and version", async () => {
