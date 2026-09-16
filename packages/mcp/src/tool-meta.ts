@@ -387,6 +387,7 @@ export const TOOL_META = {
 			id: coverLetterIdSchema,
 			expectedRevision: expectedRevisionSchema,
 			...coverLetterEditableFieldsSchema,
+			name: coverLetterEditableFieldsSchema.name.optional(),
 			template: templateSchema.optional().describe("Replacement template. Omit to keep the current template."),
 		}),
 		annotations: { ...WRITE_NON_IDEMPOTENT, destructiveHint: true },

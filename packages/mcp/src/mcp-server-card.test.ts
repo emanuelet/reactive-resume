@@ -110,6 +110,14 @@ describe("buildMcpServerCard", () => {
 		expect(update.safeParse({ id: "app-1", archived: true }).success).toBe(true);
 	});
 
+	it.each([{ content: "Updated" }, { recipient: "Dear Hiring Manager" }, { template: "onyx" }])(
+		"accepts a partial cover-letter update without a name: %j",
+		(fields) => {
+			const input = { id: "letter-1", expectedRevision: 1, ...fields };
+			expect(TOOL_META[MCP_TOOL_NAME.updateCoverLetter].inputSchema.parse(input)).toEqual(input);
+		},
+	);
+
 	it("accepts only http/https application source URLs", () => {
 		const create = TOOL_META[MCP_TOOL_NAME.createApplication].inputSchema;
 
