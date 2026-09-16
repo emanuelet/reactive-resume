@@ -298,7 +298,7 @@ function RouteComponent() {
 									variant="outline"
 									onClick={() => {
 										setTextSearch("");
-										setUrlSearch({ tags: [], archived: false });
+										setUrlSearch({ search: "", tags: [], archived: false });
 									}}
 								>
 									<Trans>Clear filters</Trans>
